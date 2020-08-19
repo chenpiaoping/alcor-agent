@@ -32,11 +32,11 @@ public class AgentConfiguration {
     @Value("${drop.flows.on.start:#{true}}")
     private boolean dropFlowsOnStart;
 
-    @Value("${int.peer.patch.port:#{\"int-patch\"}}")
-    private String intPeerPatchPort;
+    @Value("${patch.int.port:#{\"patch-int\"}}")
+    private String patchIntPort;
 
-    @Value("${tun.peer.patch.port:#{\"tun-patch\"}}")
-    private String tunPeerPatchPort;
+    @Value("${patch.tun.port:#{\"patch-tun\"}}")
+    private String patchTunPort;
 
     @Value("${int.if.name:#{\"int-xxx\"}}")
     private String intIfName;
@@ -97,20 +97,20 @@ public class AgentConfiguration {
         this.dropFlowsOnStart = dropFlowsOnStart;
     }
 
-    public String getIntPeerPatchPort() {
-        return intPeerPatchPort;
+    public String getPatchIntPort() {
+        return patchIntPort;
     }
 
-    public void setIntPeerPatchPort(String intPeerPatchPort) {
-        this.intPeerPatchPort = intPeerPatchPort;
+    public void setPatchIntPort(String patchIntPort) {
+        this.patchIntPort = patchIntPort;
     }
 
-    public String getTunPeerPatchPort() {
-        return tunPeerPatchPort;
+    public String getPatchTunPort() {
+        return patchTunPort;
     }
 
-    public void setTunPeerPatchPort(String tunPeerPatchPort) {
-        this.tunPeerPatchPort = tunPeerPatchPort;
+    public void setPatchTunPort(String patchTunPort) {
+        this.patchTunPort = patchTunPort;
     }
 
     public String getIntIfName() {

@@ -18,15 +18,15 @@ package com.futurewei.alcoragent.ovs.bridge;
 import com.futurewei.alcoragent.ovs.OvsAgent;
 
 public class OvsTunnelBridge extends OvsBridge {
-    private String intPeerPatchPort;
-    private String tunPeerPatchPort;
+    private String patchIntPort;
+    private String patchTunPort;
     private OvsAgent ovsAgent;
 
-    public OvsTunnelBridge(OvsAgent ovsAgent, String bridgeName, boolean dropFlowsOnStart, String intPeerPatchPort, String tunPeerPatchPort) {
+    public OvsTunnelBridge(OvsAgent ovsAgent, String bridgeName, boolean dropFlowsOnStart, String patchIntPort, String patchTunPort) {
         super(bridgeName, dropFlowsOnStart);
         this.ovsAgent = ovsAgent;
-        this.intPeerPatchPort = intPeerPatchPort;
-        this.tunPeerPatchPort = tunPeerPatchPort;
+        this.patchIntPort = patchIntPort;
+        this.patchTunPort = patchTunPort;
     }
 
     public void init() throws Exception {
@@ -37,20 +37,20 @@ public class OvsTunnelBridge extends OvsBridge {
         super.init();
 
         /**
-         * 3.Create port: ovs-vsctl --may-exist add-port br-int intPeerPatchPort
+         * 3.Create port: ovs-vsctl --may-exist add-port br-int patchTunPort
          * ovs-vsctl set xxx
          * attrs = [('type', 'patch'),
          * ('options', {'peer': remote_name})]
          */
-        ovsAgent.getOvsIntegrationBridge().addPort(intPeerPatchPort);
+        ovsAgent.getOvsIntegrationBridge().addPort(patchTunPort);
 
 
         /**
-         * 4.Create port: ovs-vsctl --may-exist add-port br-tun tunPeerPatchPort
+         * 4.Create port: ovs-vsctl --may-exist add-port br-tun patchIntPort
          * ovs-vsctl set xxx
          * attrs = [('type', 'patch'),
          * ('options', {'peer': remote_name})]
          */
-        addPort(tunPeerPatchPort);
+        addPort(patchIntPort);
     }
 }

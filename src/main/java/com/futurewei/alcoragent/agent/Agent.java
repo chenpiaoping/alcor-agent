@@ -18,6 +18,7 @@ package com.futurewei.alcoragent.agent;
 import com.futurewei.alcor.schema.Goalstate.GoalState;
 import com.futurewei.alcor.schema.Neighbor.NeighborState;
 import com.futurewei.alcor.schema.Port.PortState;
+import com.futurewei.alcor.schema.Router.RouterState;
 import com.futurewei.alcor.schema.Subnet.SubnetState;
 import com.futurewei.alcor.schema.Vpc.VpcState;
 
@@ -27,4 +28,5 @@ public interface Agent {
     void createSubnetState(SubnetState subnetState) throws Exception;
     void createPortState(PortState portState, GoalState goalState) throws Exception;
     void createNeighborState(NeighborState neighborState, GoalState goalState) throws Exception;
+    void createRouterState(RouterState routerState, GoalState goalState) throws Exception;
 }

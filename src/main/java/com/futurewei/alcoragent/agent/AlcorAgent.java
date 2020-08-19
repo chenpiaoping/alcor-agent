@@ -18,6 +18,7 @@ package com.futurewei.alcoragent.agent;
 import com.futurewei.alcor.schema.Goalstate.GoalState;
 import com.futurewei.alcor.schema.Neighbor.NeighborState;
 import com.futurewei.alcor.schema.Port.PortState;
+import com.futurewei.alcor.schema.Router.RouterState;
 import com.futurewei.alcor.schema.Subnet.SubnetState;
 import com.futurewei.alcor.schema.Vpc.VpcState;
 
@@ -56,7 +57,14 @@ public class AlcorAgent {
         int neighborStatesCount = goalState.getNeighborStatesCount();
         if (neighborStatesCount > 0) {
             for (int i = 0; i < neighborStatesCount; i++) {
-                createPortState(goalState.getPortStates(i), goalState);
+                createNeighborState(goalState.getNeighborStates(i), goalState);
+            }
+        }
+
+        int routerStatesCount = goalState.getRouterStatesCount();
+        if (routerStatesCount > 0) {
+            for (int i = 0; i < routerStatesCount; i++) {
+                createRouterState(goalState.getRouterStates(i), goalState);
             }
         }
     }
@@ -75,5 +83,9 @@ public class AlcorAgent {
 
     public void createNeighborState(NeighborState neighborState, GoalState goalState) throws Exception {
         agent.createNeighborState(neighborState, goalState);
+    }
+
+    public void createRouterState(RouterState routerState, GoalState goalState) throws Exception {
+        agent.createRouterState(routerState, goalState);
     }
 }

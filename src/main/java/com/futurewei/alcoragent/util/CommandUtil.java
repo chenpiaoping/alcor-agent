@@ -22,8 +22,7 @@ import java.io.InputStreamReader;
 public class CommandUtil {
     public static String execute(String command) throws IOException, InterruptedException {
         System.out.println("Execute command: " + command);
-        return "";
-        /*
+
         Runtime runtime = Runtime.getRuntime();
         Process process = runtime.exec(command);
         process.waitFor();
@@ -36,6 +35,5 @@ public class CommandUtil {
         }
 
         return sb.toString();
-         */
     }
 }

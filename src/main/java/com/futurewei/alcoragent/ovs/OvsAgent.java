@@ -21,6 +21,11 @@ import com.futurewei.alcor.schema.Neighbor.NeighborConfiguration;
 import com.futurewei.alcor.schema.Neighbor.NeighborState;
 import com.futurewei.alcor.schema.Port.PortConfiguration;
 import com.futurewei.alcor.schema.Port.PortState;
+import com.futurewei.alcor.schema.Router.RouterConfiguration;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.ExternalPort;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.InternalPort;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.Route;
+import com.futurewei.alcor.schema.Router.RouterState;
 import com.futurewei.alcor.schema.Subnet.SubnetState;
 import com.futurewei.alcor.schema.Vpc.VpcConfiguration;
 import com.futurewei.alcor.schema.Vpc.VpcState;
@@ -35,10 +40,11 @@ import com.futurewei.alcoragent.ovs.exception.PortAttributeNotFound;
 import com.futurewei.alcoragent.ovs.exception.VpcConfigurationNotFound;
 import com.futurewei.alcoragent.ovs.flow.FLowTable;
 import com.futurewei.alcoragent.ovs.flow.OvsFlow;
+import com.futurewei.alcoragent.ovs.router.Router;
+import com.futurewei.alcoragent.ovs.router.RouterManager;
 import com.futurewei.alcoragent.ovs.tunnel.TunnelManager;
 import com.futurewei.alcoragent.ovs.vlan.LocalVlan;
 import com.futurewei.alcoragent.ovs.vlan.VlanManager;
-import org.apache.maven.shared.utils.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +68,7 @@ public class OvsAgent implements Agent {
     private boolean preventArpSpoofing;
     private VlanManager vlanManager;
     private TunnelManager tunnelManager;
+    private RouterManager routerManager;
 
     @PostConstruct
     public void init() throws Exception {
@@ -70,14 +77,14 @@ public class OvsAgent implements Agent {
 
         ovsIntegrationBridge = new OvsIntegrationBridge(agentConfiguration.getIntBridgeName(),
                 agentConfiguration.isDropFlowsOnStart(),
-                agentConfiguration.getIntPeerPatchPort());
+                agentConfiguration.getPatchIntPort());
         ovsIntegrationBridge.init();
 
         ovsTunnelBridge = new OvsTunnelBridge(this,
                 agentConfiguration.getTunBridgeName(),
                 agentConfiguration.isDropFlowsOnStart(),
-                agentConfiguration.getIntPeerPatchPort(),
-                agentConfiguration.getTunPeerPatchPort());
+                agentConfiguration.getPatchIntPort(),
+                agentConfiguration.getPatchTunPort());
         ovsTunnelBridge.init();
 
         ovsPhysicalBridge = new OvsPhysicalBridge(this,
@@ -91,6 +98,8 @@ public class OvsAgent implements Agent {
                 agentConfiguration.getEndVlanId());
 
         tunnelManager = new TunnelManager();
+
+        routerManager = new RouterManager();
     }
 
     @Override
@@ -344,6 +353,33 @@ public class OvsAgent implements Agent {
         actions2.add("output:" + ofPort);
 
         ovsTunnelBridge.addFlows(new OvsFlow(FLowTable.UCAST_TO_TUN, matchFields2, actions2));
+    }
+
+    @Override
+    public void createRouterState(RouterState routerState, GoalState goalState) throws Exception {
+        RouterConfiguration routerConfiguration = routerState.getConfiguration();
+
+        //Create router
+        String routerId = routerConfiguration.getId();
+        Router router = routerManager.createRouter(routerId);
+
+        //Add internal ports
+        List<InternalPort> internalPorts = routerConfiguration.getInternalPortList();
+        for (InternalPort internalPort: internalPorts) {
+            router.addInternalPort(internalPort, ovsIntegrationBridge);
+        }
+
+        //Add external ports
+        ExternalPort externalPort = routerConfiguration.getExternalPort();
+        if (externalPort != null) {
+            router.addExternalPort(externalPort);
+        }
+
+        //Add routes
+        List<Route> routes = routerConfiguration.getRouteList();
+        if (routes != null) {
+            router.addRoutes(routes);
+        }
     }
 
     public OvsIntegrationBridge getOvsIntegrationBridge() {

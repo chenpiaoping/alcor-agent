@@ -20,6 +20,7 @@ import com.futurewei.alcoragent.ovs.command.OfctlCommand;
 import com.futurewei.alcoragent.ovs.command.VsctlCommand;
 
 import java.util.List;
+import java.util.Map;
 
 public class OvsBridge implements Bridge {
     protected String bridgeName;
@@ -78,6 +79,17 @@ public class OvsBridge implements Bridge {
     @Override
     public void addPort(String portName) throws Exception {
         VsctlCommand.deletePort(bridgeName, portName);
+    }
+
+    @Override
+    public void addPort(String portName, Map<String, String> attributes) throws Exception {
+        VsctlCommand.deletePort(bridgeName, portName);
+
+        VsctlCommand.setPortAttribute("Port", portName, "tag", String.valueOf(4095));
+
+        for (Map.Entry<String, String> entry: attributes.entrySet()) {
+            VsctlCommand.setPortAttribute("Interface", portName, entry.getKey(), entry.getValue());
+        }
     }
 
     @Override

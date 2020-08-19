@@ -37,8 +37,4 @@ public class OvsCommand {
     public static String execute(String process, String options, String command, String args) throws IOException, InterruptedException {
         return CommandUtil.execute(process + " " + options + " " +command + " " + args);
     }
-
-    public static void createBridge(String bridgeName) throws IOException, InterruptedException {
-        execute("ovs-vsctl add-br " + bridgeName);
-    }
 }
