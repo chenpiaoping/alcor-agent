@@ -65,23 +65,26 @@ public class Router {
     private void setPortMacAddress(String portName, String macAddress) throws Exception {
         while (true) {
             try {
-                CommandUtil.execute("ip link set " + portName + " address " + macAddress);
+                String command = String.format("ip link set %s address %s", portName, macAddress);
+                CommandUtil.execute(command);
                 break;
             } catch (Exception e) {}
         }
     }
 
     private void addPortToNamespace(String portName) throws Exception {
-        CommandUtil.execute("ip link set " + portName + " netns " + namespace.getName());
+        String command = String.format("ip link set %s netns %s", portName, namespace.getName());
+        CommandUtil.execute(command);
     }
 
     private void setPortMtu(String portName, int mtu) throws Exception {
-        CommandUtil.execute(commandPrefix + "ip link set " +
-                portName + " mtu " + mtu);
+        String command = String.format("ip link set %s mtu %d", portName, mtu);
+        CommandUtil.execute(commandPrefix + command);
     }
 
     private void setPortStatus(String portName, String status) throws Exception {
-        CommandUtil.execute("ip link set " + portName + " " + status);
+        String command = String.format("ip link set %s %s", portName, status);
+        CommandUtil.execute(command;
     }
 
     private void createRouterPort(String portName, String portId, String macAddress, int mtu, Bridge bridge) throws Exception {
@@ -119,16 +122,16 @@ public class Router {
     }
 
     private void addPortIpAddress(String portName, String ipAddress) throws Exception {
-        CommandUtil.execute(commandPrefix + "ip address add " + ipAddress +
-                " dev " + portName + " scope global");
+        String command = String.format("ip address add %s dev %s scope global", portName, ipAddress);
+        CommandUtil.execute(commandPrefix + command);
     }
 
     private void sendArping(String portName, String ipAddress) throws Exception {
-        CommandUtil.execute(commandPrefix + "arping -U -I " +
-                portName + " -c 1 -w 1.5 " + ipAddress);
+        String command = String.format("arping -U -I %s -c 1 -w 1.5 %s", portName, ipAddress);
+        CommandUtil.execute(commandPrefix + command);
 
-        CommandUtil.execute(commandPrefix + "arping -A -I " +
-                portName + " -c 1 -w 1.5 " + ipAddress);
+        command = String.format("arping -A -I %s -c 1 -w 1.5 %s", portName, ipAddress);
+        CommandUtil.execute(commandPrefix + command);
     }
 
     public void addInternalPort(InternalPort internalPort, Bridge bridge) throws Exception {
@@ -170,27 +173,27 @@ public class Router {
     }
 
     private void addAddressScopeRouting(String portName, String addressScope) throws Exception {
-        String rule = "-o " + portName + " -m conmark --mark 0x0/0xffff0000 -j CONNMARK --save-mark " +
-                "--nfmask 0xffff0000 --ctmask 0xffff0000";
+        String rule = String.format("-o %s -m conmark --mark 0x0/0xffff0000 -j CONNMARK " +
+                "--save-mark --nfmask 0xffff0000 --ctmask 0xffff0000", portName);
         CommandUtil.execute(commandPrefix + "iptables -t nat -A POSTROUTING " + rule);
 
         if (addressScope != null) {
-            rule = "-o " + portName + " -m connmark --mark " + addressScope + " -j ACCEPT";
+            rule = String.format("-o %s -m connmark --mark %s -j CONNMARK ", portName, addressScope);
             CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
         }
     }
 
     private void addSnatRule(String portName, String sourceIp) throws Exception {
-        String rule = "-o " + portName + " -j SNAT --to-source " + sourceIp;
+        String rule = String.format("-o %s -j SNAT --to-source %s ", portName, sourceIp);
         CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
 
-        rule = "! -i " + portName + " -o " + portName + " -m connrack ! --ctstate DNAT -j ACCEPT";
+        rule = String.format("! -i %s -o %s  -m connrack ! --ctstate DNAT -j ACCEPT", portName, portName);
         CommandUtil.execute(commandPrefix + "iptables -t nat -A POSTROUTING " + rule);
 
         rule = "-m mark ! --mark xxx/xxx -m conntrack --ctstate DNAT -j SNAT --to-source";
         CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
 
-        rule = "-i " + portName + " -j MARK --set-xmark xxx/xxx";
+        rule = String.format("-i %s  -j MARK --set-xmark xxx/xxx", portName);
         CommandUtil.execute(commandPrefix + "iptables -t mangle -A mark " + rule);
     }
 
@@ -235,14 +238,11 @@ public class Router {
     }
 
     private void addDnatRule(String fixedIp, String floatingIp) throws Exception {
-        String format = "-s %s/32 -j SNAT --to-source %s";
-        String rule = String.format(format, fixedIp, floatingIp);
+        String rule = String.format("-s %s/32 -j SNAT --to-source %s", fixedIp, floatingIp);
 
         CommandUtil.execute(commandPrefix + "iptables -t mangle -A float-snat " + rule);
 
-        format = "-d %s/32 -j DNAT --to-destination %s";
-        rule = String.format(format, floatingIp, fixedIp);
-
+        rule = String.format("-d %s/32 -j DNAT --to-destination %s", floatingIp, fixedIp);
         CommandUtil.execute(commandPrefix + "iptables -t mangle -A PREROUTING " + rule);
         CommandUtil.execute(commandPrefix + "iptables -t mangle -A OUTPUT " + rule);
     }
