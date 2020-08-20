@@ -32,6 +32,7 @@ public class VsctlCommand extends OvsCommand {
     private static final String LIST_PORT_COMMAND = "del-port";
     private static final String LIST_COMMAND = "list";
     private static final String SET_COMMAND = "set";
+    private static final String CLEAR_COMMAND = "clear";
 
     private static final String MAY_EXIST_OPTION = "--may-exist";
     private static final String IF_EXIST_OPTION = "--if-exists";
@@ -131,6 +132,11 @@ public class VsctlCommand extends OvsCommand {
     public static void setPortAttribute(String table, String port, String column, String value) throws IOException, InterruptedException {
         String args = table + port + column + "=" + value;
         execute(VSCTL_PROCESS, SET_COMMAND, args);
+    }
+
+    public static void clearPortAttribute(String table, String port, String column) throws IOException, InterruptedException {
+        String args = table + port + column;
+        execute(VSCTL_PROCESS, CLEAR_COMMAND, args);
     }
 
     public static List<PortAttribute> getPortConfig(String table, List<String> ports, List<String> columns) throws IOException, InterruptedException {

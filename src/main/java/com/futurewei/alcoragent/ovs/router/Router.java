@@ -19,7 +19,10 @@ import com.futurewei.alcor.schema.Router.RouterConfiguration.InternalPort;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.ExternalPort;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.FixedIp;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.Route;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.Subnet;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.FloatingIp;
 import com.futurewei.alcoragent.ovs.bridge.Bridge;
+import com.futurewei.alcoragent.ovs.command.VsctlCommand;
 import com.futurewei.alcoragent.util.CommandUtil;
 import org.springframework.util.StringUtils;
 
@@ -38,6 +41,7 @@ public class Router {
     private IptablesManager iptablesManager;
     private String commandPrefix;
     private Map<String, InternalPort> internalPorts;
+    private ExternalPort externalPort;
     private List<Route> routes;
 
     public Router(String id) throws IOException, InterruptedException {
@@ -80,11 +84,11 @@ public class Router {
         CommandUtil.execute("ip link set " + portName + " " + status);
     }
 
-    private void createInternalPort(String portName, InternalPort internalPort, Bridge bridge) throws Exception {
+    private void createRouterPort(String portName, String portId, String macAddress, int mtu, Bridge bridge) throws Exception {
         Map<String, String> externalIdsMap = new HashMap<>();
-        externalIdsMap.put("iface-id", internalPort.getId());
+        externalIdsMap.put("iface-id", portId);
         externalIdsMap.put("iface-status", "active");
-        externalIdsMap.put("attached-mac", internalPort.getMacAddress());
+        externalIdsMap.put("attached-mac", macAddress);
 
         ObjectMapper mapper = new ObjectMapper();
         String externalIdsString = mapper.writeValueAsString(externalIdsMap);
@@ -96,18 +100,21 @@ public class Router {
         bridge.addPort(portName, attributes);
 
         //Set mac address for interface
-        setPortMacAddress(portName, internalPort.getMacAddress());
+        setPortMacAddress(portName, macAddress);
 
         //Add interface to namespace
         addPortToNamespace(portName);
 
-
         //Set MTU for interface
-        setPortMtu(portName, internalPort.getMtu());
+        setPortMtu(portName, mtu);
 
         //Set the interface's status to up
         setPortStatus(portName, "up");
+    }
 
+    private void createInternalPort(String portName, InternalPort internalPort, Bridge bridge) throws Exception {
+        createRouterPort(portName, internalPort.getId(),
+                internalPort.getMacAddress(), internalPort.getMtu(), bridge);
         internalPorts.put(portName, internalPort);
     }
 
@@ -152,22 +159,115 @@ public class Router {
         return INTERNAL_PORT_PREFIX + portId.substring(14);
     }
 
-    private void createExternalPort(String portName, ExternalPort internalPort) {
+    private void createExternalPort(String portName, ExternalPort externalPort, Bridge bridge) throws Exception {
+        createRouterPort(portName, externalPort.getId(),
+                externalPort.getMacAddress(), externalPort.getMtu(), bridge);
 
+        //Clear tag
+        VsctlCommand.clearPortAttribute("Port", portName, "tag");
+
+        this.externalPort = externalPort;
     }
 
+    private void addAddressScopeRouting(String portName, String addressScope) throws Exception {
+        String rule = "-o " + portName + " -m conmark --mark 0x0/0xffff0000 -j CONNMARK --save-mark " +
+                "--nfmask 0xffff0000 --ctmask 0xffff0000";
+        CommandUtil.execute(commandPrefix + "iptables -t nat -A POSTROUTING " + rule);
 
-    public void addExternalPort(ExternalPort externalPort) {
+        if (addressScope != null) {
+            rule = "-o " + portName + " -m connmark --mark " + addressScope + " -j ACCEPT";
+            CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
+        }
+    }
+
+    private void addSnatRule(String portName, String sourceIp) throws Exception {
+        String rule = "-o " + portName + " -j SNAT --to-source " + sourceIp;
+        CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
+
+        rule = "! -i " + portName + " -o " + portName + " -m connrack ! --ctstate DNAT -j ACCEPT";
+        CommandUtil.execute(commandPrefix + "iptables -t nat -A POSTROUTING " + rule);
+
+        rule = "-m mark ! --mark xxx/xxx -m conntrack --ctstate DNAT -j SNAT --to-source";
+        CommandUtil.execute(commandPrefix + "iptables -t nat -A snat " + rule);
+
+        rule = "-i " + portName + " -j MARK --set-xmark xxx/xxx";
+        CommandUtil.execute(commandPrefix + "iptables -t mangle -A mark " + rule);
+    }
+
+    private void addSnatRules(String portName, ExternalPort externalPort) throws Exception {
+        addAddressScopeRouting(portName, externalPort.getAddressScope());
+
+        List<FixedIp> fixedIps = externalPort.getFixedIpList();
+        for (FixedIp fixedIp: fixedIps) {
+            addSnatRule(portName, fixedIp.getIpAddress());
+        }
+    }
+
+    public void addExternalPort(ExternalPort externalPort, Bridge bridge) throws Exception {
         String portName = getExternalPortName(externalPort.getId());
 
-        createExternalPort(portName, externalPort);
+        createExternalPort(portName, externalPort, bridge);
 
+        //gateway not in subnet
 
+        //Add ip addresses to interface
+        List<FixedIp> fixedIps = externalPort.getFixedIpList();
+        for (FixedIp fixedIp: fixedIps) {
+            addPortIpAddress(portName, fixedIp.getIpAddress());
+        }
+
+        //Add default routes
+        List<Subnet> subnets = externalPort.getSubnetList();
+        if (subnets != null) {
+            for (Subnet subnet: subnets) {
+                addDefaultRoute(subnet.getGatewayIp());
+            }
+        }
+
+        //Send arping to each fixedIP
+        for (FixedIp fixedIp: fixedIps) {
+            sendArping(portName, fixedIp.getIpAddress());
+        }
+
+        addAddressScopeRouting(portName, null);
+
+        addSnatRules(portName, externalPort);
     }
+
+    private void addDnatRule(String fixedIp, String floatingIp) throws Exception {
+        String format = "-s %s/32 -j SNAT --to-source %s";
+        String rule = String.format(format, fixedIp, floatingIp);
+
+        CommandUtil.execute(commandPrefix + "iptables -t mangle -A float-snat " + rule);
+
+        format = "-d %s/32 -j DNAT --to-destination %s";
+        rule = String.format(format, floatingIp, fixedIp);
+
+        CommandUtil.execute(commandPrefix + "iptables -t mangle -A PREROUTING " + rule);
+        CommandUtil.execute(commandPrefix + "iptables -t mangle -A OUTPUT " + rule);
+    }
+
+    private void addDnatRules(List<FloatingIp> floatingIps) throws Exception {
+        for (FloatingIp floatingIp: floatingIps) {
+            addDnatRule(floatingIp.getFixedIpAddress(), floatingIp.getFloatingIpAddress());
+        }
+    }
+
+    public void addFloatingIps(List<FloatingIp> floatingIps) throws Exception {
+        //Add dnat rules
+        addDnatRules(floatingIps);
+
+        //Add floating ips
+    }
+
 
     private void addRoute(Route route) throws Exception {
         CommandUtil.execute(commandPrefix + "ip route replace to " +
                 route.getDestination() + " via" + route.getNexthop());
+    }
+
+    private void addDefaultRoute(String gateway) throws Exception {
+        CommandUtil.execute(commandPrefix + "ip route replace default via " + gateway);
     }
 
     private void deleteRoute(Route route) throws Exception {

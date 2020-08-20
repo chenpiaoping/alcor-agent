@@ -25,6 +25,7 @@ import com.futurewei.alcor.schema.Router.RouterConfiguration;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.ExternalPort;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.InternalPort;
 import com.futurewei.alcor.schema.Router.RouterConfiguration.Route;
+import com.futurewei.alcor.schema.Router.RouterConfiguration.FloatingIp;
 import com.futurewei.alcor.schema.Router.RouterState;
 import com.futurewei.alcor.schema.Subnet.SubnetState;
 import com.futurewei.alcor.schema.Vpc.VpcConfiguration;
@@ -315,12 +316,14 @@ public class OvsAgent implements Agent {
             throw new LocalVlanNotFound();
         }
 
+        //Create tunnel port
         String hostIpAddress = neighborConfiguration.getHostIpAddress();
         Integer ofPort = tunnelManager.getTunnelPort(localVlan.getNetworkType(), hostIpAddress);
         if (ofPort == null) {
             ofPort = createTunnelPort(localVlan.getNetworkType(), hostIpAddress);
         }
 
+        //Add arp proxy response flow
         String neighborIp = neighborConfiguration.getFixedIps(0).getIpAddress();
         String neighborMac = neighborConfiguration.getMacAddress();
 
@@ -342,6 +345,7 @@ public class OvsAgent implements Agent {
 
         ovsTunnelBridge.addFlows(new OvsFlow(FLowTable.ARP_RESPONDER, matchFields1, actions1));
 
+        //Add vlan_id to segment_id mapping flow
         Map<String, String> matchFields2 = new HashMap<>();
         matchFields2.put("priority", String.valueOf(2));
         matchFields2.put("dl_vlan", String.valueOf(localVlan.getVlanId()));
@@ -369,10 +373,16 @@ public class OvsAgent implements Agent {
             router.addInternalPort(internalPort, ovsIntegrationBridge);
         }
 
-        //Add external ports
+        //Add external ports and add snat rules if necessary
         ExternalPort externalPort = routerConfiguration.getExternalPort();
         if (externalPort != null) {
-            router.addExternalPort(externalPort);
+            router.addExternalPort(externalPort, ovsPhysicalBridge);
+        }
+        
+        //Add floating ips and dnat rules
+        List<FloatingIp> floatingIps = routerConfiguration.getFloatingIpList();
+        if (floatingIps != null) {
+            router.addFloatingIps(floatingIps);
         }
 
         //Add routes
